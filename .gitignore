@@ -1,0 +1,26 @@
+# =============================================================================
+# .gitignore - Hermes Agent Docker Setup
+# =============================================================================
+# Nunca suba o .env com suas chaves reais!
+.env
+# Dados do volume Docker (gerados localmente)
+hermes_data/
+workspace/
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+# Logs
+*.log
+logs/
+# Arquivos temporários
+*.tmp
+*.temp
+__pycache__/
+*.pyc
+*.pyo
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
