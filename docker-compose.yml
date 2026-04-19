@@ -1,0 +1,39 @@
+services:
+  hermes:
+    build:
+      context: https://github.com/NousResearch/hermes-agent.git#main
+      dockerfile: Dockerfile
+    image: hermes-agent:latest
+    container_name: hermes-agent
+    restart: unless-stopped
+    
+    # =====================================================================
+    # Variáveis de ambiente - coloque suas chaves no arquivo .env
+    # =====================================================================
+    env_file:
+      - .env
+    environment:
+      # UID/GID do host para permissões corretas no volume (opcional)
+      # HERMES_UID: "1000"
+      # HERMES_GID: "1000"
+      PYTHONUNBUFFERED: "1"
+
+    # =====================================================================
+    # Volume persistente - configurações, memórias e skills ficam aqui
+    # =====================================================================
+    volumes:
+      - hermes_data:/opt/data
+      # Descomente para montar o workspace local dentro do container:
+      # - ./workspace:/opt/data/workspace
+
+    # =====================================================================
+    # Porta para o gateway web (Telegram, Discord, WhatsApp, etc.)
+    # =====================================================================
+    ports:
+      - "8080:8080"   # Gateway web / API
+
+    stdin_open: true
+    tty: true
+
+volumes:
+  hermes_data:
