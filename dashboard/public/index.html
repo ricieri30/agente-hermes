@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermes Agent Dashboard</title>
+  <!-- Bootstrap 5 (CSS) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <style>
+    body { background-color: #121212; padding-top: 2rem; font-family: 'Inter', sans-serif; }
+    .card { background-color: #1e1e1e; border: 1px solid #333; margin-bottom: 20px; }
+    .log-box {
+      background: #000; color: #0f0; font-family: monospace;
+      height: 400px; overflow-y: auto; padding: 15px; border-radius: 5px; font-size: 13px;
+    }
+    .status-badge { font-size: 1rem; padding: 10px 15px; }
+    input.form-control, select.form-control {
+      background-color: #2b2b2b; color: #fff; border: 1px solid #444;
+    }
+    input.form-control:focus, select.form-control:focus {
+      background-color: #333; color: #fff; border-color: #0d6efd; box-shadow: none;
+    }
+    .btn-action:disabled { opacity: 0.6; cursor: not-allowed; }
+    .alert-ids-warning { display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="row mb-4 align-items-center">
+    <div class="col-md-6">
+      <h2><i class="bi bi-robot"></i> Hermes Agent</h2>
+    </div>
+    <div class="col-md-6 text-md-end">
+      <span id="badge-status" class="badge bg-secondary status-badge">Carregando...</span>
+      <span id="txt-uptime" class="ms-2 text-muted"></span>
+    </div>
+  </div>
+
+  <!-- Toast de notificação global -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
+    <div id="toast-msg" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div id="toast-body" class="toast-body fw-semibold"></div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Esquerda: Controles e Logs -->
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Controle do Container</h5>
+          <div class="btn-group w-100 mb-3" id="action-buttons">
+            <button id="btn-start" class="btn btn-success btn-action" onclick="act('start', this)">
+              <i class="bi bi-play-fill"></i> Iniciar
+            </button>
+            <button id="btn-stop" class="btn btn-danger btn-action" onclick="act('stop', this)">
+              <i class="bi bi-stop-fill"></i> Parar
+            </button>
+            <button id="btn-restart" class="btn btn-warning btn-action" onclick="act('restart', this)">
+              <i class="bi bi-arrow-clockwise"></i> Reiniciar
+            </button>
+          </div>
+          <div id="action-error" class="alert alert-danger py-2 d-none" role="alert"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Logs (Tempo Real)</h5>
+          <div class="d-flex align-items-center gap-2">
+            <span id="log-auto-badge" class="badge bg-success">Auto</span>
+            <button class="btn btn-sm btn-outline-light" onclick="fetchLogs()">
+              <i class="bi bi-arrow-repeat"></i> Atualizar
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <pre id="logs" class="log-box m-0">Aguardando logs...</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Direita: Configurações de API e Telegram -->
+    <div class="col-lg-5">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Configurações & APIs (.env)</h5>
+        </div>
+        <div class="card-body">
+          <form id="envForm" onsubmit="saveEnv(event)">
+
+            <h6 class="text-info mt-2">🔌 Modelo Principal</h6>
+            <div class="mb-3">
+              <label>HERMES_MODEL (ex: openrouter:provider/model)</label>
+              <input type="text" class="form-control" name="HERMES_MODEL" placeholder="openrouter:nousresearch/hermes-3-llama-3.1-405b">
+            </div>
+
+            <h6 class="text-primary mt-4">🔑 Chaves de API (Preencha as que for usar)</h6>
+            <div class="mb-2">
+              <label>OPENROUTER_API_KEY (200+ Modelos)</label>
+              <input type="password" class="form-control" name="OPENROUTER_API_KEY" placeholder="sk-or-v1-...">
+            </div>
+            <div class="mb-2">
+              <label>GROQ_API_KEY (Rápido e Gratuito)</label>
+              <input type="password" class="form-control" name="GROQ_API_KEY" placeholder="gsk_...">
+            </div>
+            <div class="mb-2">
+              <label>GEMINI_API_KEY (Google Gemini)</label>
+              <input type="password" class="form-control" name="GEMINI_API_KEY" placeholder="AIzaSy...">
+            </div>
+            <div class="mb-3">
+              <label>NOUS_API_KEY (Portal Oficial)</label>
+              <input type="password" class="form-control" name="NOUS_API_KEY" placeholder="nous-...">
+            </div>
+
+            <h6 class="text-success mt-4">💬 Telegram Gateway</h6>
+            <div class="mb-2">
+              <label>TELEGRAM_TOKEN (@BotFather)</label>
+              <input type="password" class="form-control" name="TELEGRAM_TOKEN" placeholder="1234567890:AAH...">
+            </div>
+            <div class="mb-1">
+              <label>TELEGRAM_ALLOWED_IDS <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="TELEGRAM_ALLOWED_IDS"
+                id="input-telegram-ids"
+                placeholder="Ex: 12345678,98765432"
+                oninput="checkTelegramIds(this.value)">
+              <small class="text-muted">IDs separados por vírgula. Ex: 12345,67890</small>
+            </div>
+            <!-- Aviso visual se TELEGRAM_ALLOWED_IDS estiver vazio -->
+            <div id="warn-telegram-ids" class="alert alert-warning py-2 mt-1 mb-3 alert-ids-warning" role="alert">
+              <i class="bi bi-shield-exclamation"></i>
+              <strong>Atenção:</strong> Sem IDs configurados, <b>qualquer pessoa</b> pode usar seu bot!
+              Obtenha seu ID em <a href="https://t.me/userinfobot" target="_blank" class="alert-link">@userinfobot</a>.
+            </div>
+
+            <button type="submit" id="btn-save" class="btn btn-primary w-100 mt-3 d-flex justify-content-center align-items-center">
+              <i class="bi bi-save me-2"></i> Salvar Configurações
+              <span id="save-spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+            </button>
+            <div id="save-msg" class="mt-2 text-center text-success" style="display:none;">
+              ✅ Salvo com sucesso! Reinicie o agente para aplicar.
+            </div>
+            <div id="save-err" class="mt-2 text-center text-danger" style="display:none;"></div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bootstrap JS (para Toast) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  const API = '/api';
+
+  // ─── Toast helper ───────────────────────────────
+  function showToast(message, type = 'success') {
+    const toastEl = document.getElementById('toast-msg');
+    const toastBody = document.getElementById('toast-body');
+    toastEl.className = `toast align-items-center text-bg-${type} border-0`;
+    toastBody.textContent = message;
+    const toast = new bootstrap.Toast(toastEl, { delay: 3500 });
+    toast.show();
+  }
+
+  // ─── Status ─────────────────────────────────────
+  async function fetchStatus() {
+    try {
+      const r = await fetch(API + '/status');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      const b = document.getElementById('badge-status');
+      const u = document.getElementById('txt-uptime');
+
+      if (data.status === 'running') {
+        b.className = 'badge bg-success status-badge';
+        b.innerText = 'Online';
+      } else if (data.status === 'exited') {
+        b.className = 'badge bg-danger status-badge';
+        b.innerText = 'Parado';
+      } else if (data.status === 'not_found') {
+        b.className = 'badge bg-warning text-dark status-badge';
+        b.innerText = 'Não Encontrado';
+      } else {
+        b.className = 'badge bg-secondary status-badge';
+        b.innerText = data.status || 'Desconhecido';
+      }
+      u.innerText = data.uptime ? '(' + data.uptime + ')' : '';
+    } catch (e) {
+      console.error('Status sync error:', e.message);
+    }
+  }
+
+  // ─── Logs ────────────────────────────────────────
+  async function fetchLogs() {
+    try {
+      const r = await fetch(API + '/logs');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      const logBox = document.getElementById('logs');
+      logBox.innerText = data.logs || 'Sem logs disponíveis.';
+      logBox.scrollTop = logBox.scrollHeight;
+    } catch (e) {
+      console.error('Log sync error:', e.message);
+    }
+  }
+
+  // ─── Env/Config ──────────────────────────────────
+  async function fetchEnv() {
+    try {
+      const r = await fetch(API + '/config');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const { vars } = await r.json();
+      const form = document.getElementById('envForm');
+      for (let k in vars) {
+        if (form.elements[k]) {
+          form.elements[k].value = vars[k] || '';
+        }
+      }
+      // Verificar se TELEGRAM_ALLOWED_IDS está vazio após carregar
+      const idsField = document.getElementById('input-telegram-ids');
+      if (idsField) checkTelegramIds(idsField.value);
+    } catch (e) {
+      console.error('Env sync error:', e.message);
+    }
+  }
+
+  async function saveEnv(e) {
+    e.preventDefault();
+    const spinner = document.getElementById('save-spinner');
+    const btnSave = document.getElementById('btn-save');
+    const msgOk = document.getElementById('save-msg');
+    const msgErr = document.getElementById('save-err');
+
+    spinner.classList.remove('d-none');
+    btnSave.disabled = true;
+    msgOk.style.display = 'none';
+    msgErr.style.display = 'none';
+
+    const formData = new FormData(e.target);
+    const updates = {};
+    formData.forEach((val, key) => { if (val) updates[key] = val; });
+
+    try {
+      const r = await fetch(API + '/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      const result = await r.json();
+      if (!r.ok || result.ok === false) {
+        throw new Error(result.msg || `HTTP ${r.status}`);
+      }
+      msgOk.style.display = 'block';
+      setTimeout(() => msgOk.style.display = 'none', 4000);
+      // Recarregar campos (os campos de senha voltam mascarados do servidor)
+      fetchEnv();
+    } catch (err) {
+      msgErr.textContent = '❌ Erro ao salvar: ' + err.message;
+      msgErr.style.display = 'block';
+      setTimeout(() => msgErr.style.display = 'none', 5000);
+    } finally {
+      spinner.classList.add('d-none');
+      btnSave.disabled = false;
+    }
+  }
+
+  // ─── Ações do Container ──────────────────────────
+  function setButtonsDisabled(disabled) {
+    document.querySelectorAll('.btn-action').forEach(btn => {
+      btn.disabled = disabled;
+    });
+  }
+
+  async function act(action, clickedBtn) {
+    const actionErrEl = document.getElementById('action-error');
+    actionErrEl.classList.add('d-none');
+
+    // Mostrar loading no botão clicado
+    const originalHTML = clickedBtn.innerHTML;
+    clickedBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Aguardando...`;
+    setButtonsDisabled(true);
+
+    const labels = { start: 'iniciado', stop: 'parado', restart: 'reiniciado' };
+
+    try {
+      const r = await fetch(API + '/' + action, { method: 'POST' });
+      const result = await r.json();
+
+      if (!r.ok || result.ok === false) {
+        throw new Error(result.msg || `HTTP ${r.status}`);
+      }
+      showToast(`✅ Container ${labels[action] || action} com sucesso!`, 'success');
+      setTimeout(() => { fetchStatus(); fetchLogs(); }, 1200);
+    } catch (e) {
+      actionErrEl.textContent = '❌ Erro ao executar "' + action + '": ' + e.message;
+      actionErrEl.classList.remove('d-none');
+      showToast('Erro: ' + e.message, 'danger');
+    } finally {
+      clickedBtn.innerHTML = originalHTML;
+      setButtonsDisabled(false);
+    }
+  }
+
+  // ─── Aviso TELEGRAM_ALLOWED_IDS vazio ────────────
+  function checkTelegramIds(value) {
+    const warn = document.getElementById('warn-telegram-ids');
+    if (!value || value.trim() === '') {
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+
+  // ─── Inicialização ───────────────────────────────
+  fetchEnv();
+  fetchStatus();
+  fetchLogs();
+  setInterval(fetchStatus, 3000);
+  setInterval(fetchLogs, 5000);
+</script>
+</body>
+</html>
