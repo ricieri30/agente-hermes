@@ -1,39 +1,40 @@
 services:
   hermes:
-      # Usando imagem pre-compilada do Docker Hub (muito mais leve para VPS)
-          # Evita compilar o codigo-fonte na VPS, o que causava travamentos.
-              image: nousresearch/hermes-agent:latest
-                  container_name: hermes-agent
-                      restart: unless-stopped
-                          env_file:
-                                - .env
-                                    environment:
-                                          PYTHONUNBUFFERED: "1"
-                                              volumes:
-                                                    - hermes_data:/opt/data
-                                                        ports:
-                                                              - "3000:8080"
-                                                                  stdin_open: true
-                                                                      tty: true
-                                                                          command: ["gateway", "start"]
+    # Usando imagem pre-compilada do Docker Hub (muito mais leve para VPS)
+    # Evita compilar o codigo-fonte na VPS, o que causava travamentos.
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - hermes_data:/opt/data
+    ports:
+      - "3000:8080"
+    stdin_open: true
+    tty: true
+    command: ["gateway", "start"]
 
-                                                                            dashboard:
-                                                                                build:
-                                                                                      context: ./dashboard
-                                                                                          image: hermes-dashboard:latest
-                                                                                              container_name: hermes-dashboard
-                                                                                                  restart: unless-stopped
-                                                                                                      ports:
-                                                                                                            - "8080:3000"
-                                                                                                                environment:
-                                                                                                                      - HERMES_CONTAINER=hermes-agent
-                                                                                                                            - HERMES_ENV_FILE=/hermes_env/.env
-                                                                                                                                  - DASHBOARD_PORT=3000
-                                                                                                                                      volumes:
-                                                                                                                                            - /var/run/docker.sock:/var/run/docker.sock
-                                                                                                                                                  - .:/hermes_env
-                                                                                                                                                  
-                                                                                                                                                  volumes:
-                                                                                                                                                    hermes_data:
-                                                                                                                                                        driver: local
-                                                                                                                                                        
+  dashboard:
+    build:
+      context: ./dashboard
+    image: hermes-dashboard:latest
+    container_name: hermes-dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:3000"
+    depends_on:
+      - hermes
+    environment:
+      - HERMES_CONTAINER=hermes-agent
+      - HERMES_ENV_FILE=/hermes_env/.env
+      - DASHBOARD_PORT=3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/hermes_env
+
+volumes:
+  hermes_data:
+    driver: local
