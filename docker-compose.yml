@@ -4,14 +4,25 @@ services:
     container_name: hermes-agent
     restart: unless-stopped
 
-    env_file:
-      - .env
-
     environment:
       PYTHONUNBUFFERED: "1"
+      HERMES_MODEL: "groq:llama-3.3-70b-versatile"
+      GROQ_API_KEY: ""
+      GEMINI_API_KEY: ""
+      OPENROUTER_API_KEY: ""
+      NOUS_API_KEY: ""
+      TELEGRAM_TOKEN: ""
+      TELEGRAM_ALLOWED_USERS: ""
+      TERMINAL_TIMEOUT: "60"
+      TERMINAL_LIFETIME_SECONDS: "300"
+      BROWSER_SESSION_TIMEOUT: "300"
+      BROWSER_INACTIVITY_TIMEOUT: "120"
+      WEB_TOOLS_DEBUG: "false"
+      VISION_TOOLS_DEBUG: "false"
 
     volumes:
       - hermes_data:/opt/data
+      - hermes_config:/root/.hermes
 
     ports:
       - "3000:8080"
@@ -19,25 +30,14 @@ services:
     stdin_open: true
     tty: true
 
+    entrypoint: ["/bin/sh", "-c"]
     command: >
-      sh -c "
-        mkdir -p ~/.hermes &&
-        {
-          echo HERMES_MODEL=$$HERMES_MODEL;
-          echo GROQ_API_KEY=$$GROQ_API_KEY;
-          echo GEMINI_API_KEY=$$GEMINI_API_KEY;
-          echo OPENROUTER_API_KEY=$$OPENROUTER_API_KEY;
-          [ -n \"$$NOUS_API_KEY\" ] && echo NOUS_API_KEY=$$NOUS_API_KEY;
-          echo TELEGRAM_TOKEN=$$TELEGRAM_TOKEN;
-          echo TELEGRAM_ALLOWED_USERS=$$TELEGRAM_ALLOWED_USERS;
-          echo TERMINAL_TIMEOUT=$$TERMINAL_TIMEOUT;
-          echo TERMINAL_LIFETIME_SECONDS=$$TERMINAL_LIFETIME_SECONDS;
-        } > ~/.hermes/.env &&
-        echo '--- Config criada em ~/.hermes/.env ---' &&
-        cat ~/.hermes/.env | sed 's/=.*/=***/' &&
-        echo '---------------------------------------' &&
-        hermes gateway run
-      "
+      "mkdir -p ~/.hermes &&
+      printenv | grep -E '^(GROQ_API_KEY|GEMINI_API_KEY|OPENROUTER_API_KEY|NOUS_API_KEY|HERMES_MODEL|TELEGRAM_TOKEN|TELEGRAM_ALLOWED_USERS|TERMINAL_TIMEOUT|TERMINAL_LIFETIME_SECONDS|BROWSER_SESSION_TIMEOUT|BROWSER_INACTIVITY_TIMEOUT|WEB_TOOLS_DEBUG|VISION_TOOLS_DEBUG)=' > ~/.hermes/.env &&
+      echo '=== ~/.hermes/.env criado ===' &&
+      cat ~/.hermes/.env | sed 's/=.*/=***/' &&
+      echo '================================' &&
+      hermes gateway run"
 
   dashboard:
     build:
@@ -59,4 +59,6 @@ services:
 
 volumes:
   hermes_data:
+    driver: local
+  hermes_config:
     driver: local
