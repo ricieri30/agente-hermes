@@ -32,12 +32,15 @@ services:
 
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      "mkdir -p ~/.hermes &&
+      "export PATH=/opt/hermes/.venv/bin:/opt/hermes/bin:/usr/local/bin:/usr/bin:/bin:$PATH &&
+      mkdir -p ~/.hermes &&
       printenv | grep -E '^(GROQ_API_KEY|GEMINI_API_KEY|OPENROUTER_API_KEY|NOUS_API_KEY|HERMES_MODEL|TELEGRAM_TOKEN|TELEGRAM_ALLOWED_USERS|TERMINAL_TIMEOUT|TERMINAL_LIFETIME_SECONDS|BROWSER_SESSION_TIMEOUT|BROWSER_INACTIVITY_TIMEOUT|WEB_TOOLS_DEBUG|VISION_TOOLS_DEBUG)=' > ~/.hermes/.env &&
-      echo '=== ~/.hermes/.env criado ===' &&
+      echo '=== Config: ~/.hermes/.env ===' &&
       cat ~/.hermes/.env | sed 's/=.*/=***/' &&
-      echo '================================' &&
-      hermes gateway run"
+      echo '==============================' &&
+      HERMES_BIN=$(which hermes 2>/dev/null || find /opt /usr/local /usr -name hermes -type f 2>/dev/null | head -1) &&
+      echo Binario: $HERMES_BIN &&
+      exec $HERMES_BIN gateway run"
 
   dashboard:
     build:
