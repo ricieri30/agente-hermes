@@ -1,48 +1,18 @@
 services:
   hermes:
-    # =====================================================================
-    # Usando imagem pre-compilada do Docker Hub (muito mais leve para VPS)
-    # Evita compilar o codigo-fonte na VPS, o que causava travamentos.
-    # =====================================================================
     image: nousresearch/hermes-agent:latest
     container_name: hermes-agent
     restart: unless-stopped
-
-    # =====================================================================
-    # Variaveis de ambiente - coloque suas chaves no arquivo .env
-    # =====================================================================
     env_file:
       - .env
-
     environment:
       PYTHONUNBUFFERED: "1"
-
-    # =====================================================================
-    # Volume persistente - configuracoes, memorias e skills ficam aqui
-    # =====================================================================
     volumes:
       - hermes_data:/opt/data
-      # Descomente para montar o workspace local dentro do container:
-      # - ./workspace:/opt/data/workspace
-
-    # =====================================================================
-    # Porta para o gateway web (Telegram, Discord, WhatsApp, etc.)
-    # =====================================================================
     ports:
-      - "8080:8080"   # Gateway web / API
-
+      - "8080:8080"
     stdin_open: true
     tty: true
-
-    # Limite de recursos para evitar travamento da VPS
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
-
-    # Comando padrao: inicia o gateway
     command: ["gateway", "start"]
 
   dashboard:
@@ -58,15 +28,8 @@ services:
       - HERMES_ENV_FILE=/hermes_env/.env
       - DASHBOARD_PORT=3000
     volumes:
-      # Acesso ao socket docker para controlar o container do hermes (start/stop/logs)
       - /var/run/docker.sock:/var/run/docker.sock
-      # Mapeia a pasta local onde o .env esta na maquina host
       - .:/hermes_env
-    # Limite de recursos para o dashboard
-    deploy:
-      resources:
-        limits:
-          memory: 128M
 
 volumes:
   hermes_data:
