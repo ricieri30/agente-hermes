@@ -3,17 +3,41 @@ services:
     image: nousresearch/hermes-agent:latest
     container_name: hermes-agent
     restart: unless-stopped
+
     env_file:
       - .env
+
     environment:
       PYTHONUNBUFFERED: "1"
+
     volumes:
       - hermes_data:/opt/data
+
     ports:
       - "3000:8080"
+
     stdin_open: true
     tty: true
-    command: ["gateway", "run"]
+
+    command: >
+      sh -c "
+        mkdir -p ~/.hermes &&
+        {
+          echo HERMES_MODEL=$$HERMES_MODEL;
+          echo GROQ_API_KEY=$$GROQ_API_KEY;
+          echo GEMINI_API_KEY=$$GEMINI_API_KEY;
+          echo OPENROUTER_API_KEY=$$OPENROUTER_API_KEY;
+          [ -n \"$$NOUS_API_KEY\" ] && echo NOUS_API_KEY=$$NOUS_API_KEY;
+          echo TELEGRAM_TOKEN=$$TELEGRAM_TOKEN;
+          echo TELEGRAM_ALLOWED_USERS=$$TELEGRAM_ALLOWED_USERS;
+          echo TERMINAL_TIMEOUT=$$TERMINAL_TIMEOUT;
+          echo TERMINAL_LIFETIME_SECONDS=$$TERMINAL_LIFETIME_SECONDS;
+        } > ~/.hermes/.env &&
+        echo '--- Config criada em ~/.hermes/.env ---' &&
+        cat ~/.hermes/.env | sed 's/=.*/=***/' &&
+        echo '---------------------------------------' &&
+        hermes gateway run
+      "
 
   dashboard:
     build:
