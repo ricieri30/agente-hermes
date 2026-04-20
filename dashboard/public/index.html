@@ -125,14 +125,14 @@
               <input type="password" class="form-control" name="TELEGRAM_TOKEN" placeholder="1234567890:AAH...">
             </div>
             <div class="mb-1">
-              <label>TELEGRAM_ALLOWED_IDS <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" name="TELEGRAM_ALLOWED_IDS"
+              <label>TELEGRAM_ALLOWED_USERS <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="TELEGRAM_ALLOWED_USERS"
                 id="input-telegram-ids"
                 placeholder="Ex: 12345678,98765432"
                 oninput="checkTelegramIds(this.value)">
               <small class="text-muted">IDs separados por vírgula. Ex: 12345,67890</small>
             </div>
-            <!-- Aviso visual se TELEGRAM_ALLOWED_IDS estiver vazio -->
+            <!-- Aviso visual se TELEGRAM_ALLOWED_USERS estiver vazio -->
             <div id="warn-telegram-ids" class="alert alert-warning py-2 mt-1 mb-3 alert-ids-warning" role="alert">
               <i class="bi bi-shield-exclamation"></i>
               <strong>Atenção:</strong> Sem IDs configurados, <b>qualquer pessoa</b> pode usar seu bot!
@@ -225,7 +225,7 @@
           form.elements[k].value = vars[k] || '';
         }
       }
-      // Verificar se TELEGRAM_ALLOWED_IDS está vazio após carregar
+      // Verificar se TELEGRAM_ALLOWED_USERS está vazio após carregar
       const idsField = document.getElementById('input-telegram-ids');
       if (idsField) checkTelegramIds(idsField.value);
     } catch (e) {
@@ -310,7 +310,7 @@
     }
   }
 
-  // ─── Aviso TELEGRAM_ALLOWED_IDS vazio ────────────
+  // ─── Aviso TELEGRAM_ALLOWED_USERS vazio ────────────
   function checkTelegramIds(value) {
     const warn = document.getElementById('warn-telegram-ids');
     if (!value || value.trim() === '') {
