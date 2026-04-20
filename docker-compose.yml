@@ -1,7 +1,5 @@
 services:
   hermes:
-    # Usando imagem pre-compilada do Docker Hub (muito mais leve para VPS)
-    # Evita compilar o codigo-fonte na VPS, o que causava travamentos.
     image: nousresearch/hermes-agent:latest
     container_name: hermes-agent
     restart: unless-stopped
@@ -15,7 +13,7 @@ services:
       - "3000:8080"
     stdin_open: true
     tty: true
-    command: ["gateway", "start"]
+    command: ["gateway", "run"]
 
   dashboard:
     build:
