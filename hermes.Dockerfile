@@ -1,18 +1,15 @@
 FROM nousresearch/hermes-agent:latest
 
-# Copia e garante permissão de execução no entrypoint
+# Mostra usuario e estrutura da imagem para diagnostico
+RUN echo "=== Usuario na imagem ===" && whoami && \
+    echo "=== HOME ===" && echo $HOME && \
+    echo "=== /usr/local/bin ===" && ls /usr/local/bin/ && \
+    echo "=== pip hermes ===" && (pip list 2>/dev/null | grep -i hermes || echo "nenhum") && \
+    echo "=== find hermes binarios ===" && \
+    (find /usr /opt /app /home -maxdepth 6 -name "hermes*" -type f 2>/dev/null | grep -v ".pyc" || echo "nenhum encontrado")
+
+# Copia entrypoint
 COPY --chmod=755 hermes-entrypoint.sh /usr/local/bin/hermes-entrypoint.sh
 
-# Debug: lista binários disponíveis no build para diagnóstico
-RUN echo "=== Binários disponíveis ===" && \
-    ls /usr/local/bin/ && \
-    echo "=== Verificando hermes ===" && \
-    (command -v hermes-agent && echo "hermes-agent OK") || \
-    (command -v hermes && echo "hermes OK") || \
-    (python3 -c "import hermes; print('python module OK')" 2>/dev/null) || \
-    echo "AVISO: binario nao encontrado ainda (pode ser instalado em runtime)"
-
 ENTRYPOINT ["/usr/local/bin/hermes-entrypoint.sh"]
-
-# gateway run = modo messaging (Telegram/WhatsApp/Discord)
 CMD ["gateway", "run"]
