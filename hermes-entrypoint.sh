@@ -1,5 +1,5 @@
 #!/bin/sh
-echo "=== Hermes Entrypoint v6 ==="
+echo "=== Hermes Entrypoint v7 — auth.json fix ==="
 echo "=== Usuario: $(whoami) | HOME: $HOME ==="
 
 # Carrega .env
@@ -8,105 +8,131 @@ if [ -f /opt/hermes_project/.env ]; then
 fi
 
 MODEL="${HERMES_MODEL:-groq:llama-3.3-70b-versatile}"
-CONFIG_DIR="/opt/data/.hermes"
+DATA_DIR="/opt/data"
+AUTH_FILE="$DATA_DIR/auth.json"
 
 echo "=== Modelo: $MODEL ==="
 echo "=== GROQ_API_KEY: $([ -n "$GROQ_API_KEY" ] && echo OK || echo AUSENTE) ==="
 echo "=== TELEGRAM_TOKEN: $([ -n "$TELEGRAM_TOKEN" ] && echo OK || echo AUSENTE) ==="
 
-# Garante permissões e cria config
-mkdir -p "$CONFIG_DIR" 2>/dev/null
-chmod 777 "$CONFIG_DIR" 2>/dev/null
+# Mostra auth.json atual (sem expor keys)
+echo "=== auth.json atual (formato): ==="
+if [ -f "$AUTH_FILE" ]; then
+  cat "$AUTH_FILE" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    # Mostra estrutura sem expor keys
+    def redact(obj, depth=0):
+        if isinstance(obj, dict):
+            return {k: ('***' if any(x in k.lower() for x in ['key','token','secret','pass']) else redact(v, depth+1)) for k,v in obj.items()}
+        elif isinstance(obj, list):
+            return [redact(i, depth+1) for i in obj]
+        return obj
+    print(json.dumps(redact(d), indent=2))
+    print('KEYS_TOP:', list(d.keys()))
+except Exception as e:
+    print('Erro lendo auth.json:', e)
+    print('Conteudo raw (primeiros 200 chars):')
+    sys.stdin = open('$AUTH_FILE')
+    print(open('$AUTH_FILE').read()[:200])
+"
+else
+  echo "(auth.json nao existe ainda)"
+fi
 
-echo "=== Permissões: $(ls -la /opt/data/ | grep .hermes) ==="
-
-# Apaga config antigo (Gemini corrompido)
-rm -f "$CONFIG_DIR/config.yaml" "$CONFIG_DIR/.env" "$CONFIG_DIR"/*.yaml 2>/dev/null
-echo "=== Config antigo removido ==="
-
-# Descobre formato correto via Python
+# Patch do auth.json com Python
+echo "=== Aplicando patch no auth.json ==="
 python3 - << PYEOF
-import os, sys
+import os, json
 
-sys.path.insert(0, '/opt/hermes/.venv/lib/python3.13/site-packages')
+auth_file = '/opt/data/auth.json'
+groq_key  = os.environ.get('GROQ_API_KEY', '')
+tg_token  = os.environ.get('TELEGRAM_TOKEN', '')
+tg_users  = os.environ.get('TELEGRAM_ALLOWED_USERS', '8039948294')
+model     = os.environ.get('HERMES_MODEL', 'groq:llama-3.3-70b-versatile')
 
-config_dir = '/opt/data/.hermes'
-model      = os.environ.get('HERMES_MODEL', 'groq:llama-3.3-70b-versatile')
-groq_key   = os.environ.get('GROQ_API_KEY', '')
-tg_token   = os.environ.get('TELEGRAM_TOKEN', '')
-tg_users   = os.environ.get('TELEGRAM_ALLOWED_USERS', '')
-
-# Tenta encontrar o modulo de config para saber o schema exato
-config_class = None
-for mod_name in ['hermes_agent.config', 'hermes.config', 'hermesagent.config']:
-    try:
-        mod = __import__(mod_name, fromlist=['Config','Settings','LLMConfig'])
-        print(f'[OK] Config module: {mod.__file__}')
-        # Inspeciona o schema
-        import inspect
-        for name, cls in inspect.getmembers(mod, inspect.isclass):
-            print(f'  Classe: {name} -> {[f for f in getattr(cls, "__fields__", {}).keys()]}')
-        config_class = mod
-        break
-    except Exception as e:
-        print(f'[--] {mod_name}: {e}')
-
-# Escreve config.yaml no formato mais provável
-provider = model.split(':')[0] if ':' in model else 'groq'
+provider  = model.split(':')[0] if ':' in model else 'groq'
 model_id  = model.split(':')[1] if ':' in model else model
 
-config_yaml = f"""# Hermes Agent Config — gerado pelo entrypoint
-llm:
-  provider: "{provider}"
-  model: "{model_id}"
-  api_key: "{groq_key}"
-
-model: "{model}"
-
-providers:
-  groq:
-    api_key: "{groq_key}"
-  gemini:
-    api_key: ""
-
-telegram:
-  token: "{tg_token}"
-  allowed_users: [{tg_users}]
-
-data_dir: "/opt/data"
-"""
-
-path = f'{config_dir}/config.yaml'
-try:
-    with open(path, 'w') as f:
-        f.write(config_yaml)
-    print(f'[OK] config.yaml escrito: {path}')
-except Exception as e:
-    print(f'[ERRO] Nao conseguiu escrever config: {e}')
-
-# Tambem tenta via sqlite se houver db
-import glob
-dbs = glob.glob(f'{config_dir}/*.db') + glob.glob(f'{config_dir}/*.sqlite')
-print(f'Databases encontrados: {dbs}')
-for db in dbs:
+# Le auth.json existente para entender o formato
+existing = {}
+if os.path.exists(auth_file):
     try:
-        import sqlite3
-        conn = sqlite3.connect(db)
-        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        print(f'  DB {db} tabelas: {tables}')
-        for (t,) in tables:
-            rows = conn.execute(f'SELECT * FROM {t} LIMIT 3').fetchall()
-            cols = [d[0] for d in conn.execute(f'SELECT * FROM {t} LIMIT 0').description]
-            print(f'    {t} colunas: {cols}')
-            print(f'    {t} dados: {rows}')
-        conn.close()
+        with open(auth_file) as f:
+            existing = json.load(f)
+        print(f'[OK] auth.json lido. Chaves: {list(existing.keys())}')
     except Exception as e:
-        print(f'  Erro lendo {db}: {e}')
+        print(f'[WARN] Erro lendo auth.json: {e}')
+
+# Detecta o formato e aplica patch
+patched = dict(existing)
+
+# Formato 1: {provider, api_key, model}
+if 'api_key' in existing or 'provider' in existing:
+    patched['provider'] = provider
+    patched['api_key']  = groq_key
+    patched['model']    = model_id
+    print('[OK] Formato detectado: {provider, api_key, model}')
+
+# Formato 2: {gemini: {api_key:...}, groq: {api_key:...}, default:...}
+elif any(p in existing for p in ['gemini', 'groq', 'openai', 'anthropic']):
+    patched['groq']    = {'api_key': groq_key}
+    patched['gemini']  = {'api_key': ''}  # zera gemini
+    patched['default'] = 'groq'
+    patched['model']   = model_id
+    print('[OK] Formato detectado: providers dict')
+
+# Formato 3: {llm: {provider, api_key, model}}
+elif 'llm' in existing:
+    patched['llm'] = {
+        'provider': provider,
+        'api_key':  groq_key,
+        'model':    model_id
+    }
+    print('[OK] Formato detectado: {llm: {...}}')
+
+# Formato desconhecido - escreve todos os campos possiveis
+else:
+    print(f'[WARN] Formato desconhecido, escrevendo todos os campos. Keys: {list(existing.keys())}')
+    patched.update({
+        'provider':       provider,
+        'api_key':        groq_key,
+        'model':          model_id,
+        'default_model':  model,
+        'groq_api_key':   groq_key,
+        'gemini_api_key': '',
+        'llm': {
+            'provider': provider,
+            'api_key':  groq_key,
+            'model':    model_id
+        }
+    })
+
+# Adiciona telegram se tiver campos de mensagem no auth
+if 'telegram' in existing or 'telegram_token' in existing:
+    patched['telegram_token'] = tg_token
+    patched['telegram'] = {'token': tg_token, 'allowed_users': tg_users.split(',')}
+
+# Salva
+try:
+    with open(auth_file, 'w') as f:
+        json.dump(patched, f, indent=2)
+    print(f'[OK] auth.json atualizado!')
+    # Mostra resultado sem keys
+    safe = json.loads(json.dumps(patched))
+    for k in safe:
+        if any(x in str(k).lower() for x in ['key','token','secret']):
+            if isinstance(safe[k], str):
+                safe[k] = safe[k][:8] + '...' if safe[k] else ''
+    print(f'[OK] Resultado: {json.dumps(safe, indent=2)}')
+except Exception as e:
+    print(f'[ERRO] Nao conseguiu salvar auth.json: {e}')
+    import traceback; traceback.print_exc()
 
 PYEOF
 
-echo "=== Config escrito. Iniciando gateway... ==="
-echo "=== Conteudo do config.yaml: ==="
-cat "$CONFIG_DIR/config.yaml" 2>/dev/null | grep -v api_key || echo "(nao existe)"
-
+echo "=============================="
+echo "=== INICIANDO GATEWAY ==="
+echo "=============================="
 exec /opt/hermes/.venv/bin/hermes-agent gateway run
