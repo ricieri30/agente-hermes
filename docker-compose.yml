@@ -1,67 +1,55 @@
 services:
   hermes:
-    image: nousresearch/hermes-agent:latest
-    container_name: hermes-agent
-    restart: unless-stopped
-
-    environment:
-      PYTHONUNBUFFERED: "1"
-      HERMES_MODEL: "groq:llama-3.3-70b-versatile"
-      GROQ_API_KEY: ""
-      GEMINI_API_KEY: ""
-      OPENROUTER_API_KEY: ""
-      NOUS_API_KEY: ""
-      TELEGRAM_TOKEN: ""
-      TELEGRAM_ALLOWED_USERS: ""
-      TERMINAL_TIMEOUT: "60"
-      TERMINAL_LIFETIME_SECONDS: "300"
-      BROWSER_SESSION_TIMEOUT: "300"
-      BROWSER_INACTIVITY_TIMEOUT: "120"
-      WEB_TOOLS_DEBUG: "false"
-      VISION_TOOLS_DEBUG: "false"
-
-    volumes:
-      - hermes_data:/opt/data
-      - hermes_config:/root/.hermes
-
-    ports:
-      - "3000:8080"
-
-    stdin_open: true
-    tty: true
-
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "export PATH=/opt/hermes/.venv/bin:/opt/hermes/bin:/usr/local/bin:/usr/bin:/bin:$PATH &&
-      mkdir -p ~/.hermes &&
-      printenv | grep -E '^(GROQ_API_KEY|GEMINI_API_KEY|OPENROUTER_API_KEY|NOUS_API_KEY|HERMES_MODEL|TELEGRAM_TOKEN|TELEGRAM_ALLOWED_USERS|TERMINAL_TIMEOUT|TERMINAL_LIFETIME_SECONDS|BROWSER_SESSION_TIMEOUT|BROWSER_INACTIVITY_TIMEOUT|WEB_TOOLS_DEBUG|VISION_TOOLS_DEBUG)=' > ~/.hermes/.env &&
-      echo '=== Config: ~/.hermes/.env ===' &&
-      cat ~/.hermes/.env | sed 's/=.*/=***/' &&
-      echo '==============================' &&
-      HERMES_BIN=$(which hermes 2>/dev/null || find /opt /usr/local /usr -name hermes -type f 2>/dev/null | head -1) &&
-      echo Binario: $HERMES_BIN &&
-      exec $HERMES_BIN gateway run"
-
-  dashboard:
-    build:
-      context: ./dashboard
-    image: hermes-dashboard:latest
-    container_name: hermes-dashboard
-    restart: unless-stopped
-    ports:
-      - "8080:3000"
-    depends_on:
-      - hermes
-    environment:
-      - HERMES_CONTAINER=hermes-agent
-      - HERMES_ENV_FILE=/hermes_env/.env
-      - DASHBOARD_PORT=3000
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - .:/hermes_env
-
-volumes:
-  hermes_data:
-    driver: local
-  hermes_config:
-    driver: local
+      build:
+            context: .
+                  dockerfile: hermes.Dockerfile
+                      image: hermes-agent-custom:latest
+                          container_name: hermes-agent
+                              restart: unless-stopped
+                                  env_file:
+                                        - path: .env
+                                                required: false
+                                                    environment:
+                                                          PYTHONUNBUFFERED: "1"
+                                                                HERMES_MODEL: "groq:llama-3.3-70b-versatile"
+                                                                      GROQ_API_KEY: ""
+                                                                            GEMINI_API_KEY: ""
+                                                                                  OPENROUTER_API_KEY: ""
+                                                                                        NOUS_API_KEY: ""
+                                                                                              TELEGRAM_TOKEN: ""
+                                                                                                    TELEGRAM_ALLOWED_USERS: ""
+                                                                                                          TERMINAL_TIMEOUT: "60"
+                                                                                                                TERMINAL_LIFETIME_SECONDS: "300"
+                                                                                                                      BROWSER_SESSION_TIMEOUT: "300"
+                                                                                                                            BROWSER_INACTIVITY_TIMEOUT: "120"
+                                                                                                                                  WEB_TOOLS_DEBUG: "false"
+                                                                                                                                        VISION_TOOLS_DEBUG: "false"
+                                                                                                                                            volumes:
+                                                                                                                                                  - hermes_data:/opt/data
+                                                                                                                                                      ports:
+                                                                                                                                                            - "3000:8080"
+                                                                                                                                                                stdin_open: true
+                                                                                                                                                                    tty: true
+                                                                                                                                                                    
+                                                                                                                                                                      dashboard:
+                                                                                                                                                                          build:
+                                                                                                                                                                                context: ./dashboard
+                                                                                                                                                                                    image: hermes-dashboard:latest
+                                                                                                                                                                                        container_name: hermes-dashboard
+                                                                                                                                                                                            restart: unless-stopped
+                                                                                                                                                                                                ports:
+                                                                                                                                                                                                      - "8080:3000"
+                                                                                                                                                                                                          depends_on:
+                                                                                                                                                                                                                - hermes
+                                                                                                                                                                                                                    environment:
+                                                                                                                                                                                                                          - HERMES_CONTAINER=hermes-agent
+                                                                                                                                                                                                                                - HERMES_ENV_FILE=/hermes_env/.env
+                                                                                                                                                                                                                                      - DASHBOARD_PORT=3000
+                                                                                                                                                                                                                                          volumes:
+                                                                                                                                                                                                                                                - /var/run/docker.sock:/var/run/docker.sock
+                                                                                                                                                                                                                                                      - .:/hermes_env
+                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                      volumes:
+                                                                                                                                                                                                                                                        hermes_data:
+                                                                                                                                                                                                                                                            driver: local
+                                                                                                                                                                                                                                                            
