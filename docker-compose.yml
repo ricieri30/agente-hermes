@@ -9,42 +9,36 @@ services:
     restart: unless-stopped
     environment:
       PYTHONUNBUFFERED: "1"
-      # Modelo principal — Groq gratuito como padrão
-      HERMES_MODEL: "groq:llama-3.3-70b-versatile"
-      # Chaves de API — preencher no .env (não aqui)
+      HERMES_MODEL: "${HERMES_MODEL:-groq:llama-3.3-70b-versatile}"
       GROQ_API_KEY: "${GROQ_API_KEY}"
       GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       NOUS_API_KEY: "${NOUS_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-      # Telegram Gateway
       TELEGRAM_TOKEN: "${TELEGRAM_TOKEN:-}"
       TELEGRAM_ALLOWED_USERS: "${TELEGRAM_ALLOWED_USERS:-}"
-      # Discord Gateway (opcional)
       DISCORD_TOKEN: "${DISCORD_TOKEN:-}"
-      # Timeouts
       TERMINAL_TIMEOUT: "60"
       TERMINAL_LIFETIME_SECONDS: "300"
       BROWSER_SESSION_TIMEOUT: "300"
       BROWSER_INACTIVITY_TIMEOUT: "120"
-      # Debug (false em produção)
       WEB_TOOLS_DEBUG: "false"
       VISION_TOOLS_DEBUG: "false"
       MOA_TOOLS_DEBUG: "false"
     volumes:
-      - hermes_data:/root/.hermes
+      - hermes_data:/opt/data/.hermes
       - .:/opt/hermes_project
-    # Porta interna do hermes API (usada pelo dashboard)
     expose:
       - "8080"
     stdin_open: true
     tty: true
+    # Healthcheck simples — verifica se o processo está rodando
     healthcheck:
-      test: ["CMD", "sh", "-c", "command -v hermes-agent || command -v hermes || python3 -c 'import hermes'"]
+      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep -qE '(hermes|python)' && echo OK"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 40s
 
   dashboard:
     build:
@@ -53,7 +47,6 @@ services:
     container_name: hermes-dashboard
     restart: unless-stopped
     ports:
-      # Dashboard acessível em http://localhost:8080
       - "8080:3000"
     depends_on:
       - hermes
