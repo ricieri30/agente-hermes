@@ -7,25 +7,20 @@ services:
     image: hermes-agent-custom:latest
     container_name: hermes-agent
     restart: unless-stopped
-    # TODAS as variáveis vêm do .env — sem hardcode aqui
-    env_file:
-      - .env
+    env_file: .env
     environment:
       PYTHONUNBUFFERED: "1"
     volumes:
-      # Volume de dados do hermes — onde fica auth.json, memórias, etc
       - hermes_data:/opt/data
-      # Monta o projeto para o entrypoint ler o .env atualizado pelo dashboard
       - .:/opt/hermes_project
-    # Hermes não precisa expor porta — só o dashboard precisa
     stdin_open: true
     tty: true
     healthcheck:
-      test: ["CMD", "sh", "-c", "pgrep -f hermes-agent > /dev/null && echo OK"]
+      test: ["CMD", "sh", "-c", "pgrep -f 'hermes-agent gateway' > /dev/null && echo OK"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
 
   dashboard:
     build:
@@ -34,7 +29,6 @@ services:
     container_name: hermes-dashboard
     restart: unless-stopped
     ports:
-      # Dashboard acessível em http://SEU-IP:8080
       - "8080:3000"
     depends_on:
       - hermes
@@ -43,9 +37,7 @@ services:
       - HERMES_ENV_FILE=/hermes_env/.env
       - DASHBOARD_PORT=3000
     volumes:
-      # Acesso ao Docker socket para controlar o container hermes
       - /var/run/docker.sock:/var/run/docker.sock
-      # Acesso ao .env para leitura/escrita pelo dashboard
       - .:/hermes_env
 
 volumes:
