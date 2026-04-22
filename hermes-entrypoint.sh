@@ -1,138 +1,140 @@
 #!/bin/sh
-echo "=== Hermes Entrypoint v7 — auth.json fix ==="
-echo "=== Usuario: $(whoami) | HOME: $HOME ==="
+echo "=== Hermes Entrypoint v9 — DEFINITIVO ==="
+echo "=== Usuario: $(whoami) | DATA: $(date) ==="
 
-# Carrega .env
+# ─── 1. CARREGA .env com suporte a valores com ':' e '=' ───────────────────
 if [ -f /opt/hermes_project/.env ]; then
-  set -a; . /opt/hermes_project/.env; set +a
+  echo "=== Carregando .env ==="
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in '#'*|'') continue ;; esac
+    key="${line%%=*}"
+    val="${line#*=}"
+    val="${val%\"}" ; val="${val#\"}"
+    val="${val%\'}" ; val="${val#\'}"
+    [ -n "$key" ] && export "$key=$val" 2>/dev/null || true
+  done < /opt/hermes_project/.env
 fi
 
 MODEL="${HERMES_MODEL:-groq:llama-3.3-70b-versatile}"
-DATA_DIR="/opt/data"
-AUTH_FILE="$DATA_DIR/auth.json"
+PROVIDER="${MODEL%%:*}"
+MODEL_ID="${MODEL#*:}"
+HERMES_BIN="/opt/hermes/.venv/bin/hermes-agent"
 
-echo "=== Modelo: $MODEL ==="
-echo "=== GROQ_API_KEY: $([ -n "$GROQ_API_KEY" ] && echo OK || echo AUSENTE) ==="
-echo "=== TELEGRAM_TOKEN: $([ -n "$TELEGRAM_TOKEN" ] && echo OK || echo AUSENTE) ==="
+echo "=== Provider: $PROVIDER | Model: $MODEL_ID ==="
+echo "=== GROQ_API_KEY   : $([ -n "$GROQ_API_KEY"    ] && echo 'OK ['${#GROQ_API_KEY}' chars]' || echo 'AUSENTE ← ERRO!')==="
+echo "=== TELEGRAM_TOKEN : $([ -n "$TELEGRAM_TOKEN"  ] && echo 'OK' || echo 'AUSENTE ← bot nao vai funcionar')==="
 
-# Mostra auth.json atual (sem expor keys)
-echo "=== auth.json atual (formato): ==="
-if [ -f "$AUTH_FILE" ]; then
-  cat "$AUTH_FILE" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    # Mostra estrutura sem expor keys
-    def redact(obj, depth=0):
-        if isinstance(obj, dict):
-            return {k: ('***' if any(x in k.lower() for x in ['key','token','secret','pass']) else redact(v, depth+1)) for k,v in obj.items()}
-        elif isinstance(obj, list):
-            return [redact(i, depth+1) for i in obj]
-        return obj
-    print(json.dumps(redact(d), indent=2))
-    print('KEYS_TOP:', list(d.keys()))
-except Exception as e:
-    print('Erro lendo auth.json:', e)
-    print('Conteudo raw (primeiros 200 chars):')
-    sys.stdin = open('$AUTH_FILE')
-    print(open('$AUTH_FILE').read()[:200])
-"
-else
-  echo "(auth.json nao existe ainda)"
-fi
+# ─── 2. APAGA CACHE CORROMPIDO ─────────────────────────────────────────────
+echo "=== Limpando caches antigos ==="
+rm -f /opt/data/models_dev_cache.json 2>/dev/null && echo "  models_dev_cache.json removido" || echo "  (cache nao existia)"
+rm -f /opt/data/.hermes/config.yaml   2>/dev/null || true
+rm -f /opt/data/.hermes/*.yaml        2>/dev/null || true
 
-# Patch do auth.json com Python
-echo "=== Aplicando patch no auth.json ==="
+# ─── 3. PATCH COMPLETO DO auth.json ────────────────────────────────────────
+echo "=== Patchando auth.json ==="
 python3 - << PYEOF
-import os, json
+import os, json, sys
 
 auth_file = '/opt/data/auth.json'
 groq_key  = os.environ.get('GROQ_API_KEY', '')
 tg_token  = os.environ.get('TELEGRAM_TOKEN', '')
 tg_users  = os.environ.get('TELEGRAM_ALLOWED_USERS', '8039948294')
 model     = os.environ.get('HERMES_MODEL', 'groq:llama-3.3-70b-versatile')
-
 provider  = model.split(':')[0] if ':' in model else 'groq'
 model_id  = model.split(':')[1] if ':' in model else model
 
-# Le auth.json existente para entender o formato
-existing = {}
-if os.path.exists(auth_file):
-    try:
-        with open(auth_file) as f:
-            existing = json.load(f)
-        print(f'[OK] auth.json lido. Chaves: {list(existing.keys())}')
-    except Exception as e:
-        print(f'[WARN] Erro lendo auth.json: {e}')
+if not groq_key:
+    print('[ERRO FATAL] GROQ_API_KEY está vazia! Defina no .env')
+    sys.exit(1)
 
-# Detecta o formato e aplica patch
-patched = dict(existing)
+# Seleciona a key certa por provider
+key_map = {
+    'groq':       groq_key,
+    'openrouter': os.environ.get('OPENROUTER_API_KEY', ''),
+    'anthropic':  os.environ.get('ANTHROPIC_API_KEY', ''),
+    'gemini':     '',
+}
+api_key = key_map.get(provider, groq_key)
 
-# Formato 1: {provider, api_key, model}
-if 'api_key' in existing or 'provider' in existing:
-    patched['provider'] = provider
-    patched['api_key']  = groq_key
-    patched['model']    = model_id
-    print('[OK] Formato detectado: {provider, api_key, model}')
+# Lê ou cria auth.json
+try:
+    with open(auth_file) as f:
+        auth = json.load(f)
+    print(f'[OK] auth.json lido — keys: {list(auth.keys())}')
+except:
+    auth = {}
+    print('[INFO] Criando auth.json do zero')
 
-# Formato 2: {gemini: {api_key:...}, groq: {api_key:...}, default:...}
-elif any(p in existing for p in ['gemini', 'groq', 'openai', 'anthropic']):
-    patched['groq']    = {'api_key': groq_key}
-    patched['gemini']  = {'api_key': ''}  # zera gemini
-    patched['default'] = 'groq'
-    patched['model']   = model_id
-    print('[OK] Formato detectado: providers dict')
-
-# Formato 3: {llm: {provider, api_key, model}}
-elif 'llm' in existing:
-    patched['llm'] = {
+# Patch COMPLETO de todos os campos conhecidos
+auth.update({
+    'provider':       provider,
+    'api_key':        api_key,
+    'model':          model_id,
+    'default_model':  model,
+    'groq_api_key':   groq_key,
+    'gemini_api_key': '',
+    'openrouter_api_key': os.environ.get('OPENROUTER_API_KEY', ''),
+    'llm': {
         'provider': provider,
-        'api_key':  groq_key,
+        'api_key':  api_key,
         'model':    model_id
     }
-    print('[OK] Formato detectado: {llm: {...}}')
+})
 
-# Formato desconhecido - escreve todos os campos possiveis
-else:
-    print(f'[WARN] Formato desconhecido, escrevendo todos os campos. Keys: {list(existing.keys())}')
-    patched.update({
-        'provider':       provider,
-        'api_key':        groq_key,
-        'model':          model_id,
-        'default_model':  model,
-        'groq_api_key':   groq_key,
-        'gemini_api_key': '',
-        'llm': {
-            'provider': provider,
-            'api_key':  groq_key,
-            'model':    model_id
-        }
-    })
+# Adiciona telegram se token disponível
+if tg_token:
+    auth['telegram'] = {
+        'token':         tg_token,
+        'allowed_users': [int(u.strip()) for u in tg_users.split(',') if u.strip().isdigit()]
+    }
 
-# Adiciona telegram se tiver campos de mensagem no auth
-if 'telegram' in existing or 'telegram_token' in existing:
-    patched['telegram_token'] = tg_token
-    patched['telegram'] = {'token': tg_token, 'allowed_users': tg_users.split(',')}
+with open(auth_file, 'w') as f:
+    json.dump(auth, f, indent=2)
 
-# Salva
-try:
-    with open(auth_file, 'w') as f:
-        json.dump(patched, f, indent=2)
-    print(f'[OK] auth.json atualizado!')
-    # Mostra resultado sem keys
-    safe = json.loads(json.dumps(patched))
-    for k in safe:
-        if any(x in str(k).lower() for x in ['key','token','secret']):
-            if isinstance(safe[k], str):
-                safe[k] = safe[k][:8] + '...' if safe[k] else ''
-    print(f'[OK] Resultado: {json.dumps(safe, indent=2)}')
-except Exception as e:
-    print(f'[ERRO] Nao conseguiu salvar auth.json: {e}')
-    import traceback; traceback.print_exc()
+# Validação final
+with open(auth_file) as f:
+    saved = json.load(f)
 
+ok = saved.get('provider') == provider and saved.get('api_key') == api_key
+print(f'[{"OK" if ok else "ERRO"}] Validação: provider={saved.get("provider")} api_key={saved.get("api_key","")[:8]}...')
+print(f'[OK] llm.provider={saved.get("llm",{}).get("provider")} llm.api_key={saved.get("llm",{}).get("api_key","")[:8]}...')
+if not ok:
+    print('[ERRO] Patch falhou!')
+    import sys; sys.exit(1)
 PYEOF
 
+PATCH_EXIT=$?
+if [ $PATCH_EXIT -ne 0 ]; then
+  echo "=== ERRO no patch do auth.json — abortando ==="
+  exit 1
+fi
+
+# ─── 4. TESTA CONEXÃO COM A API ANTES DE SUBIR ─────────────────────────────
+echo "=== Testando API Groq ==="
+python3 - << PYEOF
+import os, urllib.request, json, sys
+
+groq_key = os.environ.get('GROQ_API_KEY', '')
+if not groq_key:
+    print('[SKIP] Sem GROQ_API_KEY')
+    sys.exit(0)
+
+try:
+    req = urllib.request.Request(
+        'https://api.groq.com/openai/v1/models',
+        headers={'Authorization': f'Bearer {groq_key}', 'Content-Type': 'application/json'}
+    )
+    with urllib.request.urlopen(req, timeout=5) as r:
+        data = json.loads(r.read())
+        models = [m['id'] for m in data.get('data', [])[:3]]
+        print(f'[OK] Groq API respondeu! Modelos disponíveis: {models}')
+except Exception as e:
+    print(f'[WARN] Groq API teste falhou: {e}')
+    print('[WARN] Continuando mesmo assim...')
+PYEOF
+
+# ─── 5. INICIA O GATEWAY ───────────────────────────────────────────────────
 echo "=============================="
-echo "=== INICIANDO GATEWAY ==="
+echo "=== TUDO OK — INICIANDO GATEWAY ==="
 echo "=============================="
-exec /opt/hermes/.venv/bin/hermes-agent gateway run
+exec $HERMES_BIN gateway run

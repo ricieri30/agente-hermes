@@ -7,38 +7,25 @@ services:
     image: hermes-agent-custom:latest
     container_name: hermes-agent
     restart: unless-stopped
+    # TODAS as variáveis vêm do .env — sem hardcode aqui
+    env_file:
+      - .env
     environment:
       PYTHONUNBUFFERED: "1"
-      HERMES_MODEL: "${HERMES_MODEL:-groq:llama-3.3-70b-versatile}"
-      GROQ_API_KEY: "${GROQ_API_KEY}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
-      NOUS_API_KEY: "${NOUS_API_KEY:-}"
-      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-      TELEGRAM_TOKEN: "${TELEGRAM_TOKEN:-}"
-      TELEGRAM_ALLOWED_USERS: "${TELEGRAM_ALLOWED_USERS:-}"
-      DISCORD_TOKEN: "${DISCORD_TOKEN:-}"
-      TERMINAL_TIMEOUT: "60"
-      TERMINAL_LIFETIME_SECONDS: "300"
-      BROWSER_SESSION_TIMEOUT: "300"
-      BROWSER_INACTIVITY_TIMEOUT: "120"
-      WEB_TOOLS_DEBUG: "false"
-      VISION_TOOLS_DEBUG: "false"
-      MOA_TOOLS_DEBUG: "false"
     volumes:
-      - hermes_data:/opt/data/.hermes
+      # Volume de dados do hermes — onde fica auth.json, memórias, etc
+      - hermes_data:/opt/data
+      # Monta o projeto para o entrypoint ler o .env atualizado pelo dashboard
       - .:/opt/hermes_project
-    expose:
-      - "8080"
+    # Hermes não precisa expor porta — só o dashboard precisa
     stdin_open: true
     tty: true
-    # Healthcheck simples — verifica se o processo está rodando
     healthcheck:
-      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep -qE '(hermes|python)' && echo OK"]
+      test: ["CMD", "sh", "-c", "pgrep -f hermes-agent > /dev/null && echo OK"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 30s
 
   dashboard:
     build:
@@ -47,6 +34,7 @@ services:
     container_name: hermes-dashboard
     restart: unless-stopped
     ports:
+      # Dashboard acessível em http://SEU-IP:8080
       - "8080:3000"
     depends_on:
       - hermes
@@ -55,7 +43,9 @@ services:
       - HERMES_ENV_FILE=/hermes_env/.env
       - DASHBOARD_PORT=3000
     volumes:
+      # Acesso ao Docker socket para controlar o container hermes
       - /var/run/docker.sock:/var/run/docker.sock
+      # Acesso ao .env para leitura/escrita pelo dashboard
       - .:/hermes_env
 
 volumes:
